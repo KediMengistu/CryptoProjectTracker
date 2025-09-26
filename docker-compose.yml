@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env # inject your root .env into the container
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    # optional: pass/override per-env values
+    # environment:
+    #   SPRING_PROFILES_ACTIVE: default

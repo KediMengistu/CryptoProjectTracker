@@ -1,0 +1,16 @@
+# build output
+target
+
+# VCS + IDE noise
+.git
+.git/**
+.idea
+.vscode
+*.iml
+
+# local env files (never bake secrets)
+.env
+*.env
+
+# misc
+node_modules
