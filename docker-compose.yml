@@ -9,5 +9,8 @@ services:
       - "8080:8080"
     restart: unless-stopped
     # optional: pass/override per-env values
-    # environment:
-    #   SPRING_PROFILES_ACTIVE: default
+    environment:
+      # SPRING_PROFILES_ACTIVE: default
+      JAVA_TOOL_OPTIONS: "-Ddebug"
+      LOGGING_LEVEL_ORG_FLYWAYDB: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE_FLYWAY: DEBUG

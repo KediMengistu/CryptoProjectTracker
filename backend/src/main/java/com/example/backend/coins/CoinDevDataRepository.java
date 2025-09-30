@@ -8,9 +8,12 @@ import java.time.LocalDate;
 
 public interface CoinDevDataRepository extends ReactiveCrudRepository<CoinDevData, String> {
 
+    // Kept for compatibility (unused in latest-only flow)
     Mono<CoinDevData> findByCoinGeckoIdAndSnapshotDate(String coinGeckoId, LocalDate snapshotDate);
 
+    // Kept for compatibility (unused in latest-only flow)
     Flux<CoinDevData> findTop7ByCoinGeckoIdOrderBySnapshotDateDesc(String coinGeckoId);
 
-    // For pruning, you’ll typically write a custom query in a service (select all dates > top 7 and delete).
+    // NEW: latest-only model uses a single row per coin
+    Mono<CoinDevData> findByCoinGeckoId(String coinGeckoId);
 }

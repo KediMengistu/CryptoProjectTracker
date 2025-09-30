@@ -1,15 +1,17 @@
 package com.example.backend.coins.dto;
 
 import java.util.List;
-import java.util.Map;
 
 public class CoinGeckoDtos {
 
-    // /coins/list (id, symbol, name)
+    // Still available if you need it elsewhere
     public record CoinListItem(String id, String symbol, String name) {}
 
-    // /coins/{id}?developer_data=true&...  (we only map what we need)
     public static class CoinDetail {
+        // NEW: allow refreshing fallback symbol/name from the /coins/{id} payload
+        public String symbol;
+        public String name;
+
         public Links links;
         public DeveloperData developer_data;
 
@@ -33,7 +35,21 @@ public class CoinGeckoDtos {
 
             public static class CodeDelta {
                 public Integer additions;
-                public Integer deletions; // note: CoinGecko returns negative deletions; we’ll store as-is or abs(...)
+                public Integer deletions;
+            }
+        }
+    }
+
+    // /search/trending response (we only map what's needed)
+    public static class TrendingResponse {
+        public List<Coin> coins;
+
+        public static class Coin {
+            public Item item;
+            public static class Item {
+                public String id;
+                public String symbol;
+                public String name;
             }
         }
     }

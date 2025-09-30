@@ -12,7 +12,7 @@ import reactor.core.publisher.Mono;
 public class CoinController {
 
     private final CoinReadService readService;
-    private final CoinIngestionService ingestionService; // optional – for a manual sync endpoint
+    private final CoinIngestionService ingestionService; // optional manual sync
 
     // List all tracked coins
     @GetMapping
@@ -28,15 +28,15 @@ public class CoinController {
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
-    // Get up to the last N (<=7) dev snapshots for a coin (ascending by date)
+    // Latest-only dev data for a coin
     @GetMapping("/{coinGeckoId}/dev-data")
-    public Flux<CoinDevData> getDevData(
-            @PathVariable String coinGeckoId,
-            @RequestParam(name = "days", defaultValue = "7") int days) {
-        return readService.getDevDataLastDays(coinGeckoId, days);
+    public Mono<ResponseEntity<CoinDevData>> getLatestDevData(@PathVariable String coinGeckoId) {
+        return readService.getLatestDevData(coinGeckoId)
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
-    // OPTIONAL: manual sync trigger (use carefully; consider auth/rate-limits)
+    // OPTIONAL: manual sync trigger
     @PostMapping("/sync")
     public Mono<ResponseEntity<Void>> syncAllNow() {
         return ingestionService
