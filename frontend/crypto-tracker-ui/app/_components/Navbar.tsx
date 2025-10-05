@@ -17,8 +17,9 @@ function Navbar() {
       )}
     >
       <div></div>
-      <div className="flex items-center justify-center">
+      <div className="flex items-center justify-center gap-1">
         <CiBitcoin className="h-8 w-8" />
+        <h1>CryptoRepo4U</h1>
       </div>
       <div className="flex items-center justify-end">
         <ModeToggle className="scale-75" />

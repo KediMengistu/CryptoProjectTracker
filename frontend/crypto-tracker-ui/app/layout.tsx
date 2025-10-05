@@ -1,21 +1,10 @@
+// app/layout.tsx
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "./_components/ThemeProvider";
 import Navbar from "./_components/Navbar";
-import { Card } from "@/components/ui/card";
-import { GridPattern } from "@/components/ui/grid-pattern";
+import { fontVars } from "@/lib/fonts";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -24,13 +13,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" className="h-screen w-screen" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full min-h-screen w-full`}
+        className={cn(
+          fontVars,
+          "font-sans antialiased h-full min-h-screen w-full"
+        )}
       >
         <ThemeProvider
           attribute="class"
@@ -38,20 +30,18 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="grid grid-rows-[auto_1fr] h-full w-full overflow-y-auto">
+          <div className="grid grid-rows-[auto_1fr] h-full w-full overflow-y-auto scrollbar-hide">
             <Navbar />
-            <main className="min-h-[391px] h-full w-full p-6 overflow-y-hidden">
-              <Card
-                className={[
-                  "h-full w-full relative flex justify-center overflow-hidden outline-none shadow-none bg-transparent px-2",
-                  "bg-white dark:bg-black",
-                  "[background-size:20px_20px]",
-                  "[background-image:radial-gradient(#d4d4d4_1px,transparent_1px)]",
-                  "dark:[background-image:radial-gradient(#404040_1px,transparent_1px)]",
-                ].join(" ")}
-              >
-                {children}
-              </Card>
+            <main
+              className={[
+                "min-h-[391px] h-full w-full overflow-y-hidden",
+                "bg-white dark:bg-black",
+                "[background-size:20px_20px]",
+                "[background-image:radial-gradient(#d4d4d4_1px,transparent_1px)]",
+                "dark:[background-image:radial-gradient(#404040_1px,transparent_1px)]",
+              ].join(" ")}
+            >
+              {children}
             </main>
           </div>
         </ThemeProvider>
