@@ -16,22 +16,32 @@ export default function Home() {
   const timerRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const startMinDelay = () => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    setMinDelayElapsed(false);
+    timerRef.current = window.setTimeout(() => setMinDelayElapsed(true), 2000);
+  };
+
   useEffect(() => {
-    // fire API call
+    // initial fetch
     abortRef.current = new AbortController();
     fetchFeed({ signal: abortRef.current.signal }).catch(() => void 0);
-
-    // enforce 2s minimum skeleton
-    timerRef.current = window.setTimeout(() => {
-      setMinDelayElapsed(true);
-    }, 2000);
+    startMinDelay();
 
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
       abortRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount
+  }, []);
+
+  const handleRefresh = () => {
+    // abort any in-flight request and re-fetch
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    startMinDelay();
+    fetchFeed({ signal: abortRef.current.signal }).catch(() => void 0);
+  };
 
   const showDataGrid = minDelayElapsed && status !== "loading";
 
@@ -41,7 +51,7 @@ export default function Home() {
         {!showDataGrid ? (
           <SkeletonCoinGrid />
         ) : (
-          <IntroDataCoinGrid coins={coins} />
+          <IntroDataCoinGrid coins={coins} onRefresh={handleRefresh} />
         )}
       </Card>
     </>
