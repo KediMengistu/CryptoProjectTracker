@@ -17,9 +17,7 @@ export interface CoinSliceActions {
 
 export type CoinSlice = CoinSliceState & CoinSliceActions;
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE?.replace(/\/+$/, "") ||
-  "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
 export const createCoinSlice: StateCreator<
   AppState,
