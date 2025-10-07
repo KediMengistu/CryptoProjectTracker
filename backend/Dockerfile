@@ -10,7 +10,8 @@ RUN chmod +x mvnw && ./mvnw -q -DskipTests dependency:go-offline
 
 # now copy sources and build
 COPY . .
-RUN ./mvnw -q -DskipTests package
+# re-chmod because COPY . . may overwrite mvnw without exec bit
+RUN chmod +x mvnw && ./mvnw -q -DskipTests package
 
 # ---- Run stage (Java 21 JRE) ----
 FROM eclipse-temurin:21-jre-jammy
