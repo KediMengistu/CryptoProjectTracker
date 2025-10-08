@@ -1,37 +1,38 @@
 package com.example.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Configuration
 public class CorsConfig {
 
+    /**
+     * Comma-separated list of allowed origin patterns.
+     * This value should come from the env var APP_CORS_ALLOWED_ORIGINS.
+     */
     @Bean
-    public CorsWebFilter corsWebFilter() {
+    public CorsWebFilter corsWebFilter(
+            @Value("${app.cors.allowed-origins:}") String allowedOriginsProp
+    ) {
+        // Parse CSV -> ordered unique set
+        Set<String> patterns = Arrays.stream(allowedOriginsProp.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
         CorsConfiguration cfg = new CorsConfiguration();
-
-        // Allow local dev + your deployed Vercel URL + all preview Vercel URLs
-        cfg.setAllowedOriginPatterns(List.of(
-            "http://localhost:3000",
-            "https://crypto-project-tracker-fz0toyhp0-kedimengistus-projects.vercel.app",
-            "https://*.vercel.app"
-        ));
-
-        // Typical methods your app uses
+        cfg.setAllowedOriginPatterns(new ArrayList<>(patterns));
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-
-        // Allow any headers your frontend may send (Accept, Content-Type, etc.)
         cfg.setAllowedHeaders(List.of("*"));
-
-        // Keep false if you’re not sending cookies/Authorization from the browser
+        // Keep false unless you send cookies/Authorization from the browser
         cfg.setAllowCredentials(false);
-
-        // Cache preflight for 1 hour
         cfg.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
