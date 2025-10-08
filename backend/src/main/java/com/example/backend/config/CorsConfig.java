@@ -3,9 +3,8 @@ package com.example.backend.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.reactive.CorsConfigurationSource;
-import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.reactive.CorsWebFilter;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
@@ -16,16 +15,20 @@ public class CorsConfig {
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration cfg = new CorsConfiguration();
 
-        // In local dev your frontend origin is Next.js on :3000
-        cfg.setAllowedOrigins(List.of("http://localhost:3000"));
+        // Allow local dev + your deployed Vercel URL + all preview Vercel URLs
+        cfg.setAllowedOriginPatterns(List.of(
+            "http://localhost:3000",
+            "https://crypto-project-tracker-fz0toyhp0-kedimengistus-projects.vercel.app",
+            "https://*.vercel.app"
+        ));
 
-        // Allow typical methods used by your app
+        // Typical methods your app uses
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
         // Allow any headers your frontend may send (Accept, Content-Type, etc.)
         cfg.setAllowedHeaders(List.of("*"));
 
-        // Only set true if you actually send cookies/Authorization from browser to backend
+        // Keep false if you’re not sending cookies/Authorization from the browser
         cfg.setAllowCredentials(false);
 
         // Cache preflight for 1 hour
