@@ -3,6 +3,7 @@ package com.example.backend.coins;
 import com.example.backend.coins.dto.CoinGeckoDtos.CoinDetail;
 import com.example.backend.coins.dto.CoinGeckoDtos.TrendingResponse;
 import com.example.backend.coins.fallback.FallbackRosterService;
+import com.example.backend.config.FeedCompositionProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -12,8 +13,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Predicate;
 
 @Service
@@ -21,40 +21,74 @@ import java.util.function.Predicate;
 public class CoinIngestionServiceImpl implements CoinIngestionService {
 
     private final WebClient coinGeckoWebClient;
-    private final CoinRepository coinRepository;  // kept for reads
+    private final CoinRepository coinRepository;
     private final DevDataUpsertDao devUpsertDao;
-    private final CoinsUpsertDao coinsUpsertDao;  // <-- idempotent coin upserts
+    private final CoinsUpsertDao coinsUpsertDao;
 
     private final FallbackRosterService fallbackRosterService;
+    private final FeedCompositionProperties feedProps; // 👈 use targetSize here
 
     @Override
     public Mono<Void> syncAll(LocalDate snapshotDate) {
-        LocalDate day = snapshotDate != null ? snapshotDate : LocalDate.now(ZoneOffset.UTC);
+        final LocalDate day = snapshotDate != null ? snapshotDate : LocalDate.now(ZoneOffset.UTC);
+        final int target = Math.max(1, feedProps.getTargetSize());
 
-        Mono<Void> primaryAccepted = fetchTrending()
-                .flatMapSequential(item -> processTrendingItem(item, day), 3)
-                .then();
+        // 1) Ingest ONLY the first `target` accepted trending coins
+        Mono<List<String>> acceptedTrendingIds =
+                fetchTrending()
+                        .concatMap(item -> {
+                            String id = item.item != null ? item.item.id : null;
+                            if (id == null || id.isBlank()) return Mono.empty();
 
-        Mono<Void> reconcile = fallbackRosterService.reconcileRoster();
-        Mono<Void> refreshFallback = fallbackRosterService.refreshSnapshots(day);
+                            return fetchCoinDetail(id)
+                                    .filter(detail -> hasAcceptableRepos(detail) && hasMeaningfulDevData(detail))
+                                    .flatMap(detail -> {
+                                        String[] repos = extractRepos(detail);
+                                        String symbol = detail.symbol;
+                                        String name   = detail.name;
 
-        return primaryAccepted.then(reconcile).then(refreshFallback);
+                                        // Upsert the coin, then its latest dev snapshot, then return the id we kept
+                                        return coinsUpsertDao.upsert(id, symbol, name, repos)
+                                                .onErrorResume(DuplicateKeyException.class, e -> Mono.empty())
+                                                .then(upsertLatestDevSnapshot(id, day, detail))
+                                                .thenReturn(id);
+                                    });
+                        }, 3)
+                        .distinct()
+                        .take(target)        // 👈 hard cap at 15 (or configured)
+                        .collectList();
+
+        // 2) After we’ve recorded the `target` accepted coins, prune everything else
+        Mono<Void> prunePrimaryToAccepted =
+                acceptedTrendingIds.flatMap(keepIds ->
+                        coinRepository.findAll()
+                                .filter(c -> !keepIds.contains(c.getCoinGeckoId()))
+                                .flatMap(coinRepository::delete) // dev rows cascade-delete via FK
+                                .then()
+                );
+
+        // 3) Maintain curated fallback tables (this calls CoinGecko but it’s part of the cron/sync path)
+        Mono<Void> reconcileFallback = fallbackRosterService.reconcileRoster();
+        Mono<Void> refreshFallback   = fallbackRosterService.refreshSnapshots(day);
+
+        return acceptedTrendingIds
+                .then(prunePrimaryToAccepted)
+                .then(reconcileFallback)
+                .then(refreshFallback);
     }
 
     @Override
     public Mono<Void> syncOne(String coinGeckoId, LocalDate snapshotDate) {
-        LocalDate day = snapshotDate != null ? snapshotDate : LocalDate.now(ZoneOffset.UTC);
+        final LocalDate day = snapshotDate != null ? snapshotDate : LocalDate.now(ZoneOffset.UTC);
 
-        // Fetch detail once, validate, then idempotently upsert the coin and its dev snapshot.
         return fetchCoinDetail(coinGeckoId)
                 .flatMap(detail -> {
                     if (!hasAcceptableRepos(detail) || !hasMeaningfulDevData(detail)) {
                         return Mono.empty();
                     }
-
                     String[] repos = extractRepos(detail);
-                    String symbol = detail.symbol; // CoinDetail includes symbol/name in your DTO
-                    String name   = detail.name;
+                    String symbol  = detail.symbol;
+                    String name    = detail.name;
 
                     return coinsUpsertDao.upsert(coinGeckoId, symbol, name, repos)
                             .onErrorResume(DuplicateKeyException.class, e -> Mono.empty())
@@ -63,37 +97,12 @@ public class CoinIngestionServiceImpl implements CoinIngestionService {
                 .then();
     }
 
-    /** Process a trending entry: fetch detail, upsert coin (idempotent), then upsert dev snapshot. */
-    private Mono<Void> processTrendingItem(TrendingResponse.Coin trendingCoin, LocalDate day) {
-        String id     = trendingCoin.item != null ? trendingCoin.item.id     : null;
-        String symbol = trendingCoin.item != null ? trendingCoin.item.symbol : null;
-        String name   = trendingCoin.item != null ? trendingCoin.item.name   : null;
-
-        if (id == null || id.isBlank()) {
-            return Mono.empty();
-        }
-
-        return fetchCoinDetail(id)
-                .flatMap(detail -> {
-                    if (!hasAcceptableRepos(detail) || !hasMeaningfulDevData(detail)) {
-                        return Mono.empty();
-                    }
-
-                    String[] repos = extractRepos(detail);
-
-                    // Idempotent coin write avoids unique violations under concurrency.
-                    return coinsUpsertDao.upsert(id, symbol, name, repos)
-                            .onErrorResume(DuplicateKeyException.class, e -> Mono.empty())
-                            .then(upsertLatestDevSnapshot(id, day, detail));
-                });
-    }
-
     private Flux<TrendingResponse.Coin> fetchTrending() {
         return coinGeckoWebClient.get()
                 .uri(uri -> uri.path("/search/trending").build())
                 .retrieve()
                 .bodyToMono(TrendingResponse.class)
-                .flatMapMany(resp -> resp != null && resp.coins != null
+                .flatMapMany(resp -> (resp != null && resp.coins != null)
                         ? Flux.fromIterable(resp.coins)
                         : Flux.empty());
     }
@@ -112,7 +121,6 @@ public class CoinIngestionServiceImpl implements CoinIngestionService {
                 .bodyToMono(CoinDetail.class);
     }
 
-    /** Delegate to the DAO so nullable ints are safely bound and we avoid unique-key races. */
     private Mono<Void> upsertLatestDevSnapshot(String coinGeckoId, LocalDate day, CoinDetail detail) {
         var d = detail.developer_data;
         if (d == null) return Mono.empty();
@@ -151,7 +159,7 @@ public class CoinIngestionServiceImpl implements CoinIngestionService {
     private static boolean hasMeaningfulDevData(CoinDetail detail) {
         if (detail == null || detail.developer_data == null) return false;
         var d = detail.developer_data;
-        Integer[] ints = new Integer[] {
+        Integer[] ints = new Integer[]{
                 d.forks, d.stars, d.subscribers, d.total_issues, d.closed_issues,
                 d.pull_requests_merged, d.pull_request_contributors, d.commit_count_4_weeks
         };
