@@ -17,6 +17,7 @@ export interface CoinSliceActions {
 
 export type CoinSlice = CoinSliceState & CoinSliceActions;
 
+// Read at build time (Next.js inlines this for the client bundle)
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
 export const createCoinSlice: StateCreator<
@@ -31,32 +32,39 @@ export const createCoinSlice: StateCreator<
 
   fetchFeed: async (opts) => {
     const { status } = get();
+
+    // If a previous render left us in "loading" (shouldn't persist anymore),
+    // we'll still allow a new request if the caller provided a fresh signal
+    // and explicitly wants to refetch. Keeping this simple: we keep the guard,
+    // as it’s now safe with non-persisted status.
     if (status === "loading") return;
 
-    // coin/fetchFeed:start
+    // Flip to loading
     set({ status: "loading", error: undefined }, false, "coin/fetchFeed:start");
 
     try {
+      if (!API_BASE) {
+        // Be explicit so the UI doesn't hang: surface a real error state.
+        const msg =
+          "NEXT_PUBLIC_API_BASE is not set. Configure it in your Vercel project settings.";
+        set({ status: "failed", error: msg }, false, "coin/fetchFeed:missingBase");
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/api/coins/feed`, {
         method: "GET",
         headers: { Accept: "application/json" },
+        cache: "no-store",
         signal: opts?.signal,
       });
 
       if (!res.ok) {
         const message = `Feed request failed: ${res.status} ${res.statusText}`;
-        // coin/fetchFeed:failed
-        set(
-          { status: "failed", error: message },
-          false,
-          "coin/fetchFeed:failed"
-        );
+        set({ status: "failed", error: message }, false, "coin/fetchFeed:failed");
         return;
       }
 
       const data = (await res.json()) as CoinItem[];
-
-      // coin/fetchFeed:success
       set(
         {
           coins: Array.isArray(data) ? data : [],
@@ -68,11 +76,9 @@ export const createCoinSlice: StateCreator<
       );
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        // coin/fetchFeed:aborted
         set({ status: "idle" }, false, "coin/fetchFeed:aborted");
         return;
       }
-      // coin/fetchFeed:failed:exception
       set(
         { status: "failed", error: err?.message ?? "Unknown error" },
         false,
@@ -81,7 +87,5 @@ export const createCoinSlice: StateCreator<
     }
   },
 
-  clearError: () =>
-    // coin/clearError
-    set({ error: undefined }, false, "coin/clearError"),
+  clearError: () => set({ error: undefined }, false, "coin/clearError"),
 });
