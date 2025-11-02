@@ -1,6 +1,6 @@
 package com.example.backend.coins.feed;
 
-import com.example.backend.coins.Source;
+import com.example.backend.coins.feed.Source;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonFormat;
