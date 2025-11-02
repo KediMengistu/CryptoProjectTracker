@@ -1,21 +1,34 @@
 package com.example.backend.coins.feed;
 
-import com.example.backend.coins.*;
-import com.example.backend.coins.fallback.*;
+import com.example.backend.coins.Coin;
+import com.example.backend.coins.CoinDevData;
+import com.example.backend.coins.CoinDevDataRepository;
+import com.example.backend.coins.CoinRepository;
+import com.example.backend.coins.fallback.CoinDevDataFallback;
+import com.example.backend.coins.fallback.CoinDevDataFallbackRepository;
+import com.example.backend.coins.fallback.CoinsFallback;
+import com.example.backend.coins.fallback.CoinsFallbackRepository;
 import com.example.backend.config.FeedCompositionProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.*;
-import java.util.*;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class FeedComposerService {
 
-    // 🔄 Removed WebClient/CoinGecko usage entirely
+    // No external WebClient calls here — feed is DB-only
     private final CoinRepository coinRepository;
     private final CoinDevDataRepository devRepo;
 
@@ -55,7 +68,7 @@ public class FeedComposerService {
      */
     private Flux<ComposedCoinView> acceptedPrimaries(int limit) {
         return devRepo.findAll()
-                // in-memory sort is fine here (we keep this table ≤ 15 via the cron)
+                // in-memory sort is fine here (this table is kept small by the cron)
                 .sort((a, b) -> {
                     // Prefer newest snapshot_date, then newest updated_at
                     final LocalDate da = a.getSnapshotDate() != null ? a.getSnapshotDate() : LocalDate.MIN;
@@ -70,9 +83,9 @@ public class FeedComposerService {
                     if (ua != null) return -1;
                     return 0;
                 })
-                .flatMapSequential(dev ->
-                                coinRepository.findByCoinGeckoId(dev.getCoinGeckoId())
-                                        .map(coin -> toViewFromPrimary(coin, dev, Source.TRENDING, false)),
+                .flatMapSequential(
+                        dev -> coinRepository.findByCoinGeckoId(dev.getCoinGeckoId())
+                                .map(coin -> toViewFromPrimary(coin, dev, Source.TRENDING, false)),
                         4
                 )
                 .take(limit);
@@ -89,9 +102,11 @@ public class FeedComposerService {
                 .filter(entry -> !seen.contains(entry.getCoinGeckoId()))
                 .flatMapSequential(entry ->
                                 fallbackDevRepo.findByCoinGeckoId(entry.getCoinGeckoId())
-                                        // ensure we still emit a row even if there is no dev snapshot yet
-                                        .defaultIfEmpty(null)
-                                        .map(dev -> {
+                                        // ✅ FIX: Never pass null to defaultIfEmpty — wrap with Optional
+                                        .map(Optional::of)
+                                        .defaultIfEmpty(Optional.empty())
+                                        .map(opt -> {
+                                            CoinDevDataFallback dev = opt.orElse(null);
                                             boolean stale = true;
                                             if (dev != null && dev.getSnapshotDate() != null) {
                                                 var zdt = dev.getSnapshotDate().atStartOfDay(ZoneOffset.UTC);
