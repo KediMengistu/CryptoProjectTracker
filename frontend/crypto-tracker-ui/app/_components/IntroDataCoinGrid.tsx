@@ -139,7 +139,8 @@ function IntroDataCoinGridComponent({
                         <div className="space-y-2">
                           <motion.div
                             layoutId={LID("title", c.coinGeckoId)}
-                            className="text-base md:text-lg font-semibold tracking-tight text-black/90 dark:text-white/90"
+                            title={titleText}
+                            className="text-base md:text-lg font-semibold tracking-tight text-black/90 dark:text-white/90 truncate"
                           >
                             {titleText}
                           </motion.div>
